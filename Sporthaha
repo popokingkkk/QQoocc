@@ -1,0 +1,2440 @@
+import cv2
+import numpy as np
+import time
+import tt01 as pm
+import tkinter as tk
+
+# 全域變數
+current_motion = None  # 目前選擇的運動
+current_tracking_window = None  # 目前的運動偵測視窗
+cap = None  # 相機捕捉物件
+squat_count = 0  # 初始化深蹲次數
+barbell_count = 0# 初始化槓鈴划船次數
+pushup_count=0
+right_count=0
+left_count=0
+
+squatone_count = 0
+pushupone_count=0
+barbellone_count = 0
+rightone_count=0
+leftone_count=0
+
+###積分模式###
+import cv2
+import numpy as np
+import time
+
+def track_push(detector):
+    global current_motion, current_tracking_window, cap, pushup_count
+    dir = 0
+    pTime = 0
+    pushup_count = 0
+
+    while True:
+        success, img = cap.read()
+        if not success:
+            break
+        img = cv2.resize(img, (1280, 720))
+        img = detector.findPose(img, False)
+        lmList = detector.findPosition(img, False)
+        if len(lmList) != 0:
+            detector.findAngle(img, 12, 14, 16)
+            angle = detector.findAngle(img, 11, 13, 15)
+            low = 70
+            high = 150
+            per = np.interp(angle, (low, high), (100, 0))
+            if per == 100:
+                if dir == 0:
+                    pushup_count += 0.5
+                    dir = 1
+            if per == 0:
+                if dir == 1:
+                    pushup_count += 0.5
+                    dir = 0
+
+            cv2.putText(img, f'Reps: {int(pushup_count)}', (50, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            cv2.putText(img, 'Correct', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)
+            cv2.putText(img, 'Error', (50, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)
+            bar = np.interp(angle, (low, high), (100, 650))
+            cv2.rectangle(img, (1100, 100), (1175, 650), (0, 255, 0), 3)
+            cv2.rectangle(img, (1100, int(bar)), (1175, 650), (0, 255, 0), cv2.FILLED)
+            cv2.putText(img, str(int(per)) + '%', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 4, (0, 0, 255), 3)
+            circle_center1 = (225, 200)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)
+            circle_center2 = (225, 140)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)
+            if 75 < per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)
+            elif 96 < per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)
+
+        cv2.imshow("image", img)
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            current_tracking_window.destroy()
+            current_tracking_window = None
+            break
+
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+def track_squat(detector):
+    '''
+    深蹲運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap, squat_count
+    if cap is None:
+        # 初始化攝像頭
+        cap = cv2.VideoCapture(0)
+        cap.set(3, 1280)  # 設置寬度
+        cap.set(4, 720)   # 設置高度
+    squat_count = 0  # 初始化計數器，用於計算深蹲次數
+    dir = 0  # 初始化方向標誌，用於追蹤肢體運動方向
+    pTime = 0  # 初始化上一幀的時間，用於計算幀率
+
+    while True:
+        success, img = cap.read()
+        if not success:
+            print("Failed to read frame. Exiting...")
+            break
+
+        img = cv2.resize(img, (1280, 720))
+        img = detector.findPose(img, False)  # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False)  # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            detector.findAngle(img, 24, 26, 28)  # 計算右腳踝、右膝、右髖的角度
+            angle = detector.findAngle(img, 23, 25, 27)  # 計算左髖、左膝、左腳踝的角度
+            low = 110  # 設定角度的下限值
+            high = 150  # 設定角度的上限值
+            per = np.interp(angle, (low, high), (100, 0))  # 將角度插值到百分比範圍內
+
+            if per == 100:
+                if dir == 0:
+                    squat_count += 0.5  # 每次深蹲完成，計數器增加0.5
+                    dir = 1
+            if per == 0:
+                if dir == 1:
+                    squat_count += 0.5  # 每次站立完成，計數器增加0.5
+                    dir = 0
+
+            cv2.putText(img, f'Reps: {int(squat_count)}', (50, 50),  # 在畫面上顯示深蹲次數
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)  # 在畫面上顯示幀率
+            cv2.putText(img, 'Correct', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)  # 綠色
+            cv2.putText(img, 'Error', (50, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)  # 紅色
+            bar = np.interp(angle, (low, high), (100, 650))  # 將角度插值到顯示條的範圍內
+            cv2.rectangle(img, (1100, 100), (1175, 650), (0, 255, 0), 3)  # 繪製顯示條的外框
+            cv2.rectangle(img, (1100, int(bar)), (1175, 650),
+                          (0, 255, 0), cv2.FILLED)  # 根據插值的角度繪製填充的顯示條
+            cv2.putText(img, str(int(per)) + '%', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 4, (0, 0, 255), 3)
+
+            circle_center1 = (225, 200)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+
+            circle_center2 = (225, 140)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+
+            # 檢測到不正確動作時，繪製紅色圓圈
+            if 75 < per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 96 < per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+
+        cv2.imshow("image", img)  # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            if current_tracking_window:
+                current_tracking_window.destroy()
+                current_tracking_window = None
+            break
+
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+def track_shoulder_press(detector):
+    '''
+    啞鈴彎舉運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap, right_count, left_count
+    right_count = 0             # 初始化右手啞鈴彎舉次數計數器
+    left_count = 0              # 初始化左手啞鈴彎舉次數計數器
+    right_dir = 0               # 初始化右手方向標誌，用於追蹤肢體運動方向
+    left_dir = 0                # 初始化左手方向標誌，用於追蹤肢體運動方向
+    pTime = 0                   # 初始化上一幀的時間，用於計算幀率
+    right_start_time = None     # 右手初始時間，用於追蹤從0到100的時間
+    left_start_time = None      # 左手初始時間，用於追蹤從0到100的時間
+    right_blue_light_on = False # 右手藍色燈號狀態
+    left_blue_light_on = False  # 左手藍色燈號狀態
+
+    # 設定倒數計時的時間（2分鐘）
+    countdown_time = 2 * 5  # 2分鐘倒數計時
+    start_time = time.time()  # 紀錄開始時間
+
+    while True:
+        success, img = cap.read()                   # 讀取攝像頭捕獲的畫面
+        img = cv2.resize(img, (1280, 720))          # 調整畫面大小
+        img = detector.findPose(img, False)         # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False)  # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            # 計算右手臂的角度
+            right_shoulder_angle = detector.findAngle(img, 12, 14, 16)
+            # 計算左手臂的角度
+            left_shoulder_angle = detector.findAngle(img, 11, 13, 15)
+
+            # 將右手臂的角度插值到百分比範圍內
+            right_low, right_high = 25, 170  # 角度調整
+            right_shoulder_per = np.interp(right_shoulder_angle, (right_low, right_high), (100, 0))
+
+            # 將左手臂的角度插值到百分比範圍內
+            left_low, left_high = 25, 175  # 角度調整
+            left_shoulder_per = np.interp(left_shoulder_angle, (left_low, left_high), (100, 0))
+
+            # 檢查右手臂啞鈴彎舉動作
+            if right_shoulder_per == 0:
+                right_start_time = time.time()  # 開始計時器
+                right_blue_light_on = False     # 重置右手藍色燈號狀態
+            elif right_shoulder_per == 100:
+                if right_start_time is not None:
+                    elapsed_time = time.time() - right_start_time
+                    if elapsed_time > 1.5:
+                        right_blue_light_on = True  # 超過1.5秒，開啟右手藍色燈號
+                    right_start_time = None
+
+            # 檢查左手臂啞鈴彎舉動作
+            if left_shoulder_per == 0:
+                left_start_time = time.time()  # 開始計時器
+                left_blue_light_on = False     # 重置左手藍色燈號狀態
+            elif left_shoulder_per == 100:
+                if left_start_time is not None:
+                    elapsed_time = time.time() - left_start_time
+                    if elapsed_time > 1.5:
+                        left_blue_light_on = True  # 超過1.5秒，開啟左手藍色燈號
+                    left_start_time = None
+
+            # 顯示藍色燈號
+            if right_blue_light_on:
+                right_circle_center = (925, 40)
+                right_circle_radius = 20
+                right_circle_color = (255, 0, 0)  # 藍色 BGR 格式
+                cv2.circle(img, right_circle_center, right_circle_radius, right_circle_color, -1)  # 繪製實心圓
+
+            if left_blue_light_on:
+                left_circle_center = (925, 40)
+                left_circle_radius = 20
+                left_circle_color = (255, 0, 0)  # 藍色 BGR 格式
+                cv2.circle(img, left_circle_center, left_circle_radius, left_circle_color, -1)  # 繪製實心圓
+
+            # 顯示 "Load" 文字
+            cv2.putText(img, 'Load', (800, 50), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 3)
+
+            # 檢查右手臂啞鈴彎舉動作
+            if right_shoulder_per == 100:
+                if right_dir == 0:
+                    right_count += 0.5  # 每次完成，計數器增加0.5
+                    right_dir = 1
+            if right_shoulder_per == 0:
+                if right_dir == 1:
+                    right_count += 0.5  # 每次上半身抬起完成，計數器增加0.5
+                    right_dir = 0
+
+            # 檢查左手臂啞鈴彎舉動作
+            if left_shoulder_per == 100:
+                if left_dir == 0:
+                    left_count += 0.5  # 每次完成，計數器增加0.5
+                    left_dir = 1
+            if left_shoulder_per == 0:
+                if left_dir == 1:
+                    left_count += 0.5  # 每次上半身抬起完成，計數器增加0.5
+                    left_dir = 0
+
+            # 顯示右手臂啞鈴彎舉次數
+            cv2.putText(img, f'R Reps: {int(right_count)}', (50, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            # 顯示左手臂啞鈴彎舉次數
+            cv2.putText(img, f'L Reps: {int(left_count)}', (50, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+
+            # 顯示幀率
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+
+            # 將右手臂的角度插值到顯示條的範圍內
+            right_shoulder_bar = np.interp(right_shoulder_angle, (right_low, right_high), (100, 650))
+            # 將左手臂的角度插值到顯示條的範圍內
+            left_shoulder_bar = np.interp(left_shoulder_angle, (left_low, left_high), (100, 650))
+
+            # 繪製右手臂顯示條
+            right_bar_width = 75  # 設定右手臂條的寬度
+            cv2.rectangle(img, (1100, 100), (1100 + right_bar_width, 650), (0, 255, 0), 3)
+            cv2.rectangle(img, (1100, int(right_shoulder_bar)), (1100 + right_bar_width, 650), (0, 255, 0), cv2.FILLED)
+            cv2.putText(img, f'Right: {int(right_shoulder_per)} %', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2)
+            cv2.putText(img, 'Correct', (525, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)  # 綠色
+            cv2.putText(img, 'Error', (525, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)  # 紅色
+
+            # 初始化左手顯示條的起始位置和結束位置
+            left_bar_start_x = 0
+            left_bar_end_x = 0
+
+            # 假設您想將左手顯示條向右移動 50 像素
+            left_bar_start_x += 200
+            left_bar_end_x += 275
+
+            # 繪製矩形和文字
+            cv2.rectangle(img, (left_bar_start_x, 100), (left_bar_end_x, 650), (0, 255, 0), 3)
+            cv2.rectangle(img, (left_bar_start_x, int(left_shoulder_bar)), (left_bar_end_x, 650), (0, 255, 0), cv2.FILLED)
+            cv2.putText(img, f'Left: {int(left_shoulder_per)} %', (left_bar_start_x, 75), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2)
+
+            # 繪製綠色圓圈和文字警告
+            circle_center2 = (700, 40)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+            if 96 < right_shoulder_per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+            elif 96 < left_shoulder_per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+
+            # 繪製紅色圓圈和文字警告
+            circle_center1 = (700, 90)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+            if 80 < right_shoulder_per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 80 < left_shoulder_per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+
+        cv2.imshow("Image", img)  # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            # 關閉目前的運動偵測視窗
+            current_tracking_window.destroy()
+            current_tracking_window = None
+            break
+
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+def track_pull_up(detector):
+    '''
+    槓鈴划船運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap, barbell_count
+    dir = 0  # 初始化方向標誌，用於追蹤肢體運動方向
+    pTime = 0  # 初始化上一幀的時間，用於計算幀率
+    start_time = None  # 初始時間，用於追蹤從0到100的時間
+    blue_light_on = False  # 藍色燈號狀態
+    barbell_count = 0
+
+    while True:
+        success, img = cap.read()  # 讀取攝像頭捕獲的畫面
+        img = cv2.resize(img, (1280, 720))  # 調整畫面大小
+        img = detector.findPose(img, False)  # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False)  # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            detector.findAngle(img, 12, 14, 16)  # 計算右手肩、右肘、右手腕的角度
+            angle = detector.findAngle(img, 11, 13, 15)  # 計算左手肩、左肘、左手腕的角度
+            low = 90  # 設定角度的下限值
+            high = 180  # 設定角度的上限值
+            per = np.interp(angle, (low, high), (100, 0))  # 將角度插值到百分比範圍內
+
+            if per == 0:
+                start_time = time.time()  # 開始計時器
+                blue_light_on = False  # 重置藍色燈號狀態
+            elif per == 100:
+                if start_time is not None:
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time > 1.5:
+                        blue_light_on = True  # 超過1.5秒，開啟藍色燈號
+                    start_time = None
+            
+            # 顯示藍色燈號
+            if blue_light_on:
+                circle_center = (175, 250)
+                circle_radius = 20
+                circle_color = (255, 0, 0)  # 藍色 BGR 格式
+                cv2.circle(img, circle_center, circle_radius, circle_color, -1)  # 繪製實心圓
+
+            # 顯示藍色文字
+            cv2.putText(img, 'Load', (50, 250), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 3)
+            
+            # 計數器功能
+            if per == 100:
+                if dir == 0:
+                    barbell_count += 0.5  # 每次划船完成，計數器增加0.5
+                    dir = 1
+            if per == 0:
+                if dir == 1:
+                    barbell_count += 0.5  # 每次下降完成，計數器增加0.5
+                    dir = 0
+
+            cv2.putText(img, f'Reps: {int(barbell_count)}', (50, 50),  # 在畫面上顯示划船次數
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            print(barbell_count)
+
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 100),  # 在畫面上顯示幀率
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            cv2.putText(img, 'Correct', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)  # 綠色
+            cv2.putText(img, 'Error', (50, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)  # 紅色
+            bar = np.interp(angle, (low, high), (100, 650))  # 將角度插值到顯示條的範圍內
+            cv2.rectangle(img, (1100, 100), (1175, 650), (0, 255, 0), 3)  # 繪製顯示條的外框
+            cv2.rectangle(img, (1100, int(bar)), (1175, 650),
+                          (0, 255, 0), cv2.FILLED)  # 根據插值的角度繪製填充的顯示條
+            cv2.putText(img, str(int(per)) + '%', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 4, (0, 0, 255), 3)
+
+            circle_center1 = (225, 200)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+
+            circle_center2 = (225, 140)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+
+            # 檢測到不正確動作時，繪製紅色圓圈
+            if 80 < per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 96 < per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+
+        cv2.imshow("Image", img)  # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            if current_tracking_window:
+                current_tracking_window.destroy()
+                current_tracking_window = None
+            break
+
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+###一般模式###
+def track_push1(detector):
+    '''
+    俯臥撐運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap,pushupone_count       
+    dir = 0                 # 初始化方向標誌，用於追蹤肢體運動方向
+    pTime = 0               # 初始化上一幀的時間，用於計算幀率
+    pushupone_count=0
+
+    while True:
+        success, img = cap.read()                   # 讀取攝像頭捕獲的畫面
+        img = cv2.resize(img, (1280, 720))         # 調整畫面大小
+        img = detector.findPose(img, False)        # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False) # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            detector.findAngle(img, 12, 14, 16)     # 計算右手肩、右肘、右手腕的角度
+            angle = detector.findAngle(img, 11, 13, 15)  # 計算右肩、右肘、右手腕的角度
+            low = 70                                 # 設定角度的下限值
+            high = 150                               # 設定角度的上限值
+            per = np.interp(angle, (low, high), (100, 0))  # 將角度插值到百分比範圍內
+
+            if per == 100:
+                if dir == 0:
+                    pushupone_count += 0.5                    # 每次俯臥撐完成，計數器增加0.5
+                    dir = 1
+            if per == 0:
+                if dir == 1:
+                    pushupone_count += 0.5                    # 每次上半身抬起完成，計數器增加0.5
+                    dir = 0
+
+            cv2.putText(img, f'Reps: {int(pushupone_count)}', (50, 50),         # 在畫面上顯示俯臥撐次數
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            print(pushupone_count)
+
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 100),cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)# 在畫面上顯示幀率
+            cv2.putText(img, 'Correct', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)#綠色
+            cv2.putText(img, 'Error', (50, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)#紅色
+            bar = np.interp(angle, (low, high), (100, 650))     # 將角度插值到顯示條的範圍內
+            cv2.rectangle(img, (1100, 100), (1175, 650), (0, 255, 0), 3)  # 繪製顯示條的外框
+            cv2.rectangle(img, (1100, int(bar)), (1175, 650),
+                          (0, 255, 0), cv2.FILLED)             # 根據插值的角度繪製填充的顯示條
+            cv2.putText(img, str(int(per)) + '%', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 4, (0, 0, 255), 3)
+            
+            circle_center1 = (225, 200)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+
+            circle_center2 = (225, 140)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+
+            # 檢測到不正確動作時，繪製紅色圓圈
+            if 75 < per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 96 < per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+
+        cv2.imshow("Image", img)                              # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            # 關閉目前的運動偵測視窗
+            current_tracking_window.destroy()
+            current_tracking_window = None
+            break
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+def track_squat1(detector):
+    '''
+    深蹲運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap, squatone_count
+    if cap is None:
+        # 初始化攝像頭
+        cap = cv2.VideoCapture(0)
+        cap.set(3, 1280)  # 設置寬度
+        cap.set(4, 720)   # 設置高度
+    squatone_count = 0               # 初始化計數器，用於計算深蹲次數
+    dir = 0                 # 初始化方向標誌，用於追蹤肢體運動方向
+    pTime = 0               # 初始化上一幀的時間，用於計算幀率
+
+    while True:
+        success, img = cap.read()
+        if not success:
+            print("Failed to read frame. Exiting...")
+            break
+
+        img = cv2.resize(img, (1280, 720))
+        img = detector.findPose(img, False)       # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False) # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            detector.findAngle(img, 24, 26, 28)     # 計算右腳踝、右膝、右髖的角度
+            angle = detector.findAngle(img, 23, 25, 27)  # 計算左髖、左膝、左腳踝的角度
+            low = 110                                 # 設定角度的下限值 70原本
+            high = 150                               # 設定角度的上限值 150原本
+            per = np.interp(angle, (low, high), (100, 0))  # 將角度插值到百分比範圍內
+
+            if per == 100:
+                if dir == 0:
+                    squatone_count += 0.5                    # 每次深蹲完成，計數器增加0.5
+                    dir = 1
+            if per == 0:
+                if dir == 1:
+                    squatone_count += 0.5                    # 每次站立完成，計數器增加0.5
+                    dir = 0
+
+            cv2.putText(img, f'Reps: {int(squatone_count)}', (50, 50),         # 在畫面上顯示深蹲次數
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            print(squatone_count)
+
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 100),cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)# 在畫面上顯示幀率
+            cv2.putText(img, 'Correct', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)#綠色
+            cv2.putText(img, 'Error', (50, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)#紅色
+            bar = np.interp(angle, (low, high), (100, 650))     # 將角度插值到顯示條的範圍內
+            cv2.rectangle(img, (1100, 100), (1175, 650), (0, 255, 0), 3)  # 繪製顯示條的外框
+            cv2.rectangle(img, (1100, int(bar)), (1175, 650),
+                          (0, 255, 0), cv2.FILLED)             # 根據插值的角度繪製填充的顯示條
+            cv2.putText(img, str(int(per)) + '%', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 4, (0, 0, 255), 3)
+            
+            circle_center1 = (225, 200)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+
+            circle_center2 = (225, 140)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+
+            # 檢測到不正確動作時，繪製紅色圓圈
+            if 75 < per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 96 < per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+
+        cv2.imshow("Image", img)                              # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            if current_tracking_window:
+                current_tracking_window.destroy()
+                current_tracking_window = None
+            break
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+def track_shoulder_press1(detector):
+    '''
+    啞鈴彎舉運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap,rightone_count,leftone_count
+    rightone_count = 0             # 初始化右手啞鈴彎舉次數計數器
+    leftone_count = 0              # 初始化左手啞鈴彎舉次數計數器
+    right_dir = 0               # 初始化右手方向標誌，用於追蹤肢體運動方向
+    left_dir = 0                # 初始化左手方向標誌，用於追蹤肢體運動方向
+    pTime = 0                   # 初始化上一幀的時間，用於計算幀率
+    right_start_time = None     # 右手初始時間，用於追蹤從0到100的時間
+    left_start_time = None      # 左手初始時間，用於追蹤從0到100的時間
+    right_blue_light_on = False # 右手藍色燈號狀態
+    left_blue_light_on = False  # 左手藍色燈號狀態
+
+    while True:
+        success, img = cap.read()                   # 讀取攝像頭捕獲的畫面
+        img = cv2.resize(img, (1280, 720))          # 調整畫面大小
+        img = detector.findPose(img, False)         # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False)  # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            # 計算右手臂的角度
+            right_shoulder_angle = detector.findAngle(img, 12, 14, 16)
+            # 計算左手臂的角度
+            left_shoulder_angle = detector.findAngle(img, 11, 13, 15)
+
+            # 將右手臂的角度插值到百分比範圍內
+            right_low, right_high = 25, 170  # 角度調整
+            right_shoulder_per = np.interp(right_shoulder_angle, (right_low, right_high), (100, 0))
+
+            # 將左手臂的角度插值到百分比範圍內
+            # 調整左手臂的角度範圍及插值範圍，使其與右手一致
+            left_low, left_high = 25, 175  # 角度調整
+            left_shoulder_per = np.interp(left_shoulder_angle, (left_low, left_high), (100, 0))
+
+            # 檢查右手臂啞鈴彎舉動作
+            if right_shoulder_per == 0:
+                right_start_time = time.time()  # 開始計時器
+                right_blue_light_on = False     # 重置右手藍色燈號狀態
+            elif right_shoulder_per == 100:
+                if right_start_time is not None:
+                    elapsed_time = time.time() - right_start_time
+                    if elapsed_time > 1.5:
+                        right_blue_light_on = True  # 超過3秒，開啟右手藍色燈號
+                    right_start_time = None
+
+            # 檢查左手臂啞鈴彎舉動作
+            if left_shoulder_per == 0:
+                left_start_time = time.time()  # 開始計時器
+                left_blue_light_on = False     # 重置左手藍色燈號狀態
+            elif left_shoulder_per == 100:
+                if left_start_time is not None:
+                    elapsed_time = time.time() - left_start_time
+                    if elapsed_time > 1.5:
+                        left_blue_light_on = True  # 超過3秒，開啟左手藍色燈號
+                    left_start_time = None
+
+            # 顯示藍色燈號
+            if right_blue_light_on:
+                right_circle_center = (925, 40)
+                right_circle_radius = 20
+                right_circle_color = (255, 0, 0)  # 藍色 BGR 格式
+                cv2.circle(img, right_circle_center, right_circle_radius, right_circle_color, -1)  # 繪製實心圓
+
+            if left_blue_light_on:
+                left_circle_center = (925, 40)
+                left_circle_radius = 20
+                left_circle_color = (255, 0, 0)  # 藍色 BGR 格式
+                cv2.circle(img, left_circle_center, left_circle_radius, left_circle_color, -1)  # 繪製實心圓
+
+            # 顯示 "Load" 文字
+            cv2.putText(img, 'Load', (800, 50), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 3)
+
+            # 檢查右手臂啞鈴彎舉動作
+            if right_shoulder_per == 100:
+                if right_dir == 0:
+                    rightone_count += 0.5  # 每次完成，計數器增加0.5
+                    right_dir = 1
+            if right_shoulder_per == 0:
+                if right_dir == 1:
+                    rightone_count += 0.5  # 每次上半身抬起完成，計數器增加0.5
+                    right_dir = 0
+
+            # 檢查左手臂啞鈴彎舉動作
+            if left_shoulder_per == 100:
+                if left_dir == 0:
+                    leftone_count += 0.5  # 每次完成，計數器增加0.5
+                    left_dir = 1
+            if left_shoulder_per == 0:
+                if left_dir == 1:
+                    leftone_count += 0.5  # 每次上半身抬起完成，計數器增加0.5
+                    left_dir = 0
+
+            # 顯示右手臂啞鈴彎舉次數
+            cv2.putText(img, f'R Reps: {int(rightone_count)}', (50, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            # 顯示左手臂啞鈴彎舉次數
+            cv2.putText(img, f'L Reps: {int(leftone_count)}', (50, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+
+            # 顯示幀率
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+
+            # 將右手臂的角度插值到顯示條的範圍內
+            right_shoulder_bar = np.interp(right_shoulder_angle, (right_low, right_high), (100, 650))
+            # 將左手臂的角度插值到顯示條的範圍內
+            left_shoulder_bar = np.interp(left_shoulder_angle, (left_low, left_high), (100, 650))
+
+            # 繪製右手臂顯示條
+            right_bar_width = 75  # 設定右手臂條的寬度
+            cv2.rectangle(img, (1100, 100), (1100 + right_bar_width, 650), (0, 255, 0), 3)
+            cv2.rectangle(img, (1100, int(right_shoulder_bar)), (1100 + right_bar_width, 650), (0, 255, 0),
+                          cv2.FILLED)
+            cv2.putText(img, f'Right: {int(right_shoulder_per)} %', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 2,
+                        (0, 0, 255), 2)
+            cv2.putText(img, 'Correct', (525, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)  # 綠色
+            cv2.putText(img, 'Correct', (525, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)  # 綠色
+            cv2.putText(img, 'Error', (525, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)  # 紅色
+            cv2.putText(img, 'Error', (525, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)  # 紅色
+
+            # 初始化左手顯示條的起始位置和結束位置
+            left_bar_start_x = 0
+            left_bar_end_x = 0
+
+            # 假設您想將左手顯示條向右移動 50 像素
+            left_bar_start_x += 200
+            left_bar_end_x += 275
+
+            # 繪製矩形和文字
+            cv2.rectangle(img, (left_bar_start_x, 100), (left_bar_end_x, 650), (0, 255, 0), 3)
+            cv2.rectangle(img, (left_bar_start_x, int(left_shoulder_bar)), (left_bar_end_x, 650), (0, 255, 0),
+                          cv2.FILLED)
+            cv2.putText(img, f'Left: {int(left_shoulder_per)} %', (left_bar_start_x, 75), cv2.FONT_HERSHEY_PLAIN,
+                        2, (0, 0, 255), 2)
+
+            # 繪製綠色圓圈和文字警告
+            circle_center2 = (700, 40)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+            if 96 < right_shoulder_per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+            elif 96 < left_shoulder_per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+
+            # 繪製紅色圓圈和文字警告
+            circle_center1 = (700, 90)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+            if 80 < right_shoulder_per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 80 < left_shoulder_per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+
+        cv2.imshow("Image", img)  # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            # 關閉目前的運動偵測視窗
+            current_tracking_window.destroy()
+            current_tracking_window = None
+            break
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+def track_pull_up1(detector):
+    '''
+    槓鈴划船運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap, barbellone_count
+    dir = 0                 # 初始化方向標誌，用於追蹤肢體運動方向
+    pTime = 0               # 初始化上一幀的時間，用於計算幀率
+    start_time = None       # 初始時間，用於追蹤從0到100的時間
+    blue_light_on = False   # 藍色燈號狀態
+    barbellone_count=0
+
+    while True:
+        success, img = cap.read()                   # 讀取攝像頭捕獲的畫面
+        img = cv2.resize(img, (1280, 720))         # 調整畫面大小
+        img = detector.findPose(img, False)        # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False) # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            detector.findAngle(img, 12, 14, 16)     # 計算右手肩、右肘、右手腕的角度
+            angle = detector.findAngle(img, 11, 13, 15)  # 計算左手肩、左肘、左手腕的角度
+            low = 90                                 # 設定角度的下限值
+            high = 180                               # 設定角度的上限值
+            per = np.interp(angle, (low, high), (100, 0))  # 將角度插值到百分比範圍內
+
+            if per == 0:
+                start_time = time.time()  # 開始計時器
+                blue_light_on = False     # 重置藍色燈號狀態
+            elif per == 100:
+                if start_time is not None:
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time > 1.5:
+                        blue_light_on = True  # 超過5秒，開啟藍色燈號
+                    start_time = None
+
+            # 顯示藍色燈號
+            if blue_light_on:
+                circle_center = (175, 250)
+                circle_radius = 20
+                circle_color = (255, 0, 0)  # 藍色 BGR 格式
+                cv2.circle(img, circle_center, circle_radius, circle_color, -1)  # 繪製實心圓
+
+            # 顯示藍色文字
+            cv2.putText(img, 'Load', (50, 250), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 3)
+
+            # 計數器功能
+            if per == 100:
+                if dir == 0:
+                    barbellone_count += 0.5                    # 每次划船完成，計數器增加0.5
+                    dir = 1
+            if per == 0:
+                if dir == 1:
+                    barbellone_count += 0.5                    # 每次下降完成，計數器增加0.5
+                    dir = 0
+
+            cv2.putText(img, f'Reps: {int(barbellone_count)}', (50, 50),         # 在畫面上顯示划船次數
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            print(barbellone_count)
+
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 100),          # 在畫面上顯示幀率
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            cv2.putText(img, 'Correct', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)#綠色
+            cv2.putText(img, 'Error', (50, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)#紅色
+            bar = np.interp(angle, (low, high), (100, 650))     # 將角度插值到顯示條的範圍內
+            cv2.rectangle(img, (1100, 100), (1175, 650), (0, 255, 0), 3)  # 繪製顯示條的外框
+            cv2.rectangle(img, (1100, int(bar)), (1175, 650),
+                          (0, 255, 0), cv2.FILLED)             # 根據插值的角度繪製填充的顯示條
+            cv2.putText(img, str(int(per)) + '%', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 4, (0, 0, 255), 3)
+            
+            circle_center1 = (225, 200)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+
+            circle_center2 = (225, 140)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+
+            # 檢測到不正確動作時，繪製紅色圓圈
+            if 80 < per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 96 < per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+            
+        cv2.imshow("Image", img)                              # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            if current_tracking_window:
+                current_tracking_window.destroy()
+                current_tracking_window = None
+            break
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+###體能指導###
+def track_push2(detector):
+    '''
+    俯臥撐運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap,pushupone_count       
+    dir = 0                 # 初始化方向標誌，用於追蹤肢體運動方向
+    pTime = 0               # 初始化上一幀的時間，用於計算幀率
+    pushupone_count=0
+
+    while True:
+        success, img = cap.read()                   # 讀取攝像頭捕獲的畫面
+        img = cv2.resize(img, (1280, 720))         # 調整畫面大小
+        img = detector.findPose(img, False)        # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False) # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            detector.findAngle(img, 12, 14, 16)     # 計算右手肩、右肘、右手腕的角度
+            angle = detector.findAngle(img, 11, 13, 15)  # 計算右肩、右肘、右手腕的角度
+            low = 70                                 # 設定角度的下限值
+            high = 150                               # 設定角度的上限值
+            per = np.interp(angle, (low, high), (100, 0))  # 將角度插值到百分比範圍內
+
+            if per == 100:
+                if dir == 0:
+                    pushupone_count += 0.5                    # 每次俯臥撐完成，計數器增加0.5
+                    dir = 1
+            if per == 0:
+                if dir == 1:
+                    pushupone_count += 0.5                    # 每次上半身抬起完成，計數器增加0.5
+                    dir = 0
+
+            cv2.putText(img, f'Reps: {int(pushupone_count)}', (50, 50),         # 在畫面上顯示俯臥撐次數
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            print(pushupone_count)
+
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 100),cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)# 在畫面上顯示幀率
+            cv2.putText(img, 'Correct', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)#綠色
+            cv2.putText(img, 'Error', (50, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)#紅色
+            bar = np.interp(angle, (low, high), (100, 650))     # 將角度插值到顯示條的範圍內
+            cv2.rectangle(img, (1100, 100), (1175, 650), (0, 255, 0), 3)  # 繪製顯示條的外框
+            cv2.rectangle(img, (1100, int(bar)), (1175, 650),
+                          (0, 255, 0), cv2.FILLED)             # 根據插值的角度繪製填充的顯示條
+            cv2.putText(img, str(int(per)) + '%', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 4, (0, 0, 255), 3)
+            
+            circle_center1 = (225, 200)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+
+            circle_center2 = (225, 140)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+
+            # 檢測到不正確動作時，繪製紅色圓圈
+            if 75 < per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 96 < per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+
+        cv2.imshow("Image", img)                              # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            # 關閉目前的運動偵測視窗
+            current_tracking_window.destroy()
+            current_tracking_window = None
+            break
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+def track_squat2(detector):
+    '''
+    深蹲運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap, squatone_count
+    if cap is None:
+        # 初始化攝像頭
+        cap = cv2.VideoCapture(0)
+        cap.set(3, 1280)  # 設置寬度
+        cap.set(4, 720)   # 設置高度
+    squatone_count = 0               # 初始化計數器，用於計算深蹲次數
+    dir = 0                 # 初始化方向標誌，用於追蹤肢體運動方向
+    pTime = 0               # 初始化上一幀的時間，用於計算幀率
+
+    while True:
+        success, img = cap.read()
+        if not success:
+            print("Failed to read frame. Exiting...")
+            break
+
+        img = cv2.resize(img, (1280, 720))
+        img = detector.findPose(img, False)       # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False) # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            detector.findAngle(img, 24, 26, 28)     # 計算右腳踝、右膝、右髖的角度
+            angle = detector.findAngle(img, 23, 25, 27)  # 計算左髖、左膝、左腳踝的角度
+            low = 110                                 # 設定角度的下限值 70原本
+            high = 150                               # 設定角度的上限值 150原本
+            per = np.interp(angle, (low, high), (100, 0))  # 將角度插值到百分比範圍內
+
+            if per == 100:
+                if dir == 0:
+                    squatone_count += 0.5                    # 每次深蹲完成，計數器增加0.5
+                    dir = 1
+            if per == 0:
+                if dir == 1:
+                    squatone_count += 0.5                    # 每次站立完成，計數器增加0.5
+                    dir = 0
+
+            cv2.putText(img, f'Reps: {int(squatone_count)}', (50, 50),         # 在畫面上顯示深蹲次數
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            print(squatone_count)
+
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 100),cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)# 在畫面上顯示幀率
+            cv2.putText(img, 'Correct', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)#綠色
+            cv2.putText(img, 'Error', (50, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)#紅色
+            bar = np.interp(angle, (low, high), (100, 650))     # 將角度插值到顯示條的範圍內
+            cv2.rectangle(img, (1100, 100), (1175, 650), (0, 255, 0), 3)  # 繪製顯示條的外框
+            cv2.rectangle(img, (1100, int(bar)), (1175, 650),
+                          (0, 255, 0), cv2.FILLED)             # 根據插值的角度繪製填充的顯示條
+            cv2.putText(img, str(int(per)) + '%', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 4, (0, 0, 255), 3)
+            
+            circle_center1 = (225, 200)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+
+            circle_center2 = (225, 140)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+
+            # 檢測到不正確動作時，繪製紅色圓圈
+            if 75 < per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 96 < per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+
+        cv2.imshow("Image", img)                              # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            if current_tracking_window:
+                current_tracking_window.destroy()
+                current_tracking_window = None
+            break
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+def track_shoulder_press2(detector):
+    '''
+    啞鈴彎舉運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap,rightone_count,leftone_count
+    rightone_count = 0             # 初始化右手啞鈴彎舉次數計數器
+    leftone_count = 0              # 初始化左手啞鈴彎舉次數計數器
+    right_dir = 0               # 初始化右手方向標誌，用於追蹤肢體運動方向
+    left_dir = 0                # 初始化左手方向標誌，用於追蹤肢體運動方向
+    pTime = 0                   # 初始化上一幀的時間，用於計算幀率
+    right_start_time = None     # 右手初始時間，用於追蹤從0到100的時間
+    left_start_time = None      # 左手初始時間，用於追蹤從0到100的時間
+    right_blue_light_on = False # 右手藍色燈號狀態
+    left_blue_light_on = False  # 左手藍色燈號狀態
+    right_slow_on = False
+    left_slow_on = False
+
+    while True:
+        success, img = cap.read()                   # 讀取攝像頭捕獲的畫面
+        img = cv2.resize(img, (1280, 720))          # 調整畫面大小
+        img = detector.findPose(img, False)         # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False)  # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            # 計算右手臂的角度
+            right_shoulder_angle = detector.findAngle(img, 12, 14, 16)
+            # 計算左手臂的角度
+            left_shoulder_angle = detector.findAngle(img, 11, 13, 15)
+
+            # 將右手臂的角度插值到百分比範圍內
+            right_low, right_high = 25, 170  # 角度調整
+            right_shoulder_per = np.interp(right_shoulder_angle, (right_low, right_high), (100, 0))
+
+            # 將左手臂的角度插值到百分比範圍內
+            # 調整左手臂的角度範圍及插值範圍，使其與右手一致
+            left_low, left_high = 25, 175  # 角度調整
+            left_shoulder_per = np.interp(left_shoulder_angle, (left_low, left_high), (100, 0))
+
+            # 檢查右手臂啞鈴彎舉動作
+            if right_shoulder_per == 0:
+                right_start_time = time.time()  # 開始計時器
+                right_blue_light_on = False     # 重置右手藍色燈號狀態
+                right_slow_on = False
+            elif right_shoulder_per == 100:
+                if right_start_time is not None:
+                    elapsed_time = time.time() - right_start_time
+                    if elapsed_time < 1.5:
+                        right_slow_on = True
+                    right_start_time = None
+                    if elapsed_time > 1.5:
+                        right_blue_light_on = True  # 超過3秒，開啟右手藍色燈號
+                    right_start_time = None
+
+            # 檢查左手臂啞鈴彎舉動作
+            if left_shoulder_per == 0:
+                left_start_time = time.time()  # 開始計時器
+                left_blue_light_on = False     # 重置左手藍色燈號狀態
+                left_slow_on = False
+            elif left_shoulder_per == 100:
+                if left_start_time is not None:
+                    elapsed_time = time.time() - left_start_time
+                    if elapsed_time < 1.5:
+                        left_slow_on = True
+                    left_start_time = None
+                    if elapsed_time > 1.5:
+                        left_blue_light_on = True  # 超過3秒，開啟左手藍色燈號
+                    left_start_time = None
+
+            # 顯示藍色燈號
+            if right_blue_light_on:
+                right_circle_center = (925, 40)
+                right_circle_radius = 20
+                right_circle_color = (255, 0, 0)  # 藍色 BGR 格式
+                cv2.circle(img, right_circle_center, right_circle_radius, right_circle_color, -1)  # 繪製實心圓
+
+            if left_blue_light_on:
+                left_circle_center = (925, 40)
+                left_circle_radius = 20
+                left_circle_color = (255, 0, 0)  # 藍色 BGR 格式
+                cv2.circle(img, left_circle_center, left_circle_radius, left_circle_color, -1)  # 繪製實心圓
+
+            # 顯示提示文字
+            if right_slow_on:
+                cv2.putText(img, 'Can add weight', (525, 650), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 255), 3)
+
+            if left_slow_on:
+                cv2.putText(img, 'Can add weight', (525, 650), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 255), 3)
+
+            # 顯示 "Load" 文字
+            cv2.putText(img, 'Load', (800, 50), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 3)
+
+            # 檢查右手臂啞鈴彎舉動作
+            if right_shoulder_per == 100:
+                if right_dir == 0:
+                    rightone_count += 0.5  # 每次完成，計數器增加0.5
+                    right_dir = 1
+            if right_shoulder_per == 0:
+                if right_dir == 1:
+                    rightone_count += 0.5  # 每次上半身抬起完成，計數器增加0.5
+                    right_dir = 0
+
+            # 檢查左手臂啞鈴彎舉動作
+            if left_shoulder_per == 100:
+                if left_dir == 0:
+                    leftone_count += 0.5  # 每次完成，計數器增加0.5
+                    left_dir = 1
+            if left_shoulder_per == 0:
+                if left_dir == 1:
+                    leftone_count += 0.5  # 每次上半身抬起完成，計數器增加0.5
+                    left_dir = 0
+
+            # 顯示右手臂啞鈴彎舉次數
+            cv2.putText(img, f'R Reps: {int(rightone_count)}', (50, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            # 顯示左手臂啞鈴彎舉次數
+            cv2.putText(img, f'L Reps: {int(leftone_count)}', (50, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+
+            # 顯示幀率
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+
+            # 將右手臂的角度插值到顯示條的範圍內
+            right_shoulder_bar = np.interp(right_shoulder_angle, (right_low, right_high), (100, 650))
+            # 將左手臂的角度插值到顯示條的範圍內
+            left_shoulder_bar = np.interp(left_shoulder_angle, (left_low, left_high), (100, 650))
+
+            # 繪製右手臂顯示條
+            right_bar_width = 75  # 設定右手臂條的寬度
+            cv2.rectangle(img, (1100, 100), (1100 + right_bar_width, 650), (0, 255, 0), 3)
+            cv2.rectangle(img, (1100, int(right_shoulder_bar)), (1100 + right_bar_width, 650), (0, 255, 0),
+                          cv2.FILLED)
+            cv2.putText(img, f'Right: {int(right_shoulder_per)} %', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 2,
+                        (0, 0, 255), 2)
+            cv2.putText(img, 'Correct', (525, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)  # 綠色
+            cv2.putText(img, 'Correct', (525, 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)  # 綠色
+            cv2.putText(img, 'Error', (525, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)  # 紅色
+            cv2.putText(img, 'Error', (525, 100), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)  # 紅色
+
+            # 初始化左手顯示條的起始位置和結束位置
+            left_bar_start_x = 0
+            left_bar_end_x = 0
+
+            # 假設您想將左手顯示條向右移動 50 像素
+            left_bar_start_x += 200
+            left_bar_end_x += 275
+
+            # 繪製矩形和文字
+            cv2.rectangle(img, (left_bar_start_x, 100), (left_bar_end_x, 650), (0, 255, 0), 3)
+            cv2.rectangle(img, (left_bar_start_x, int(left_shoulder_bar)), (left_bar_end_x, 650), (0, 255, 0),
+                          cv2.FILLED)
+            cv2.putText(img, f'Left: {int(left_shoulder_per)} %', (left_bar_start_x, 75), cv2.FONT_HERSHEY_PLAIN,
+                        2, (0, 0, 255), 2)
+
+            # 繪製綠色圓圈和文字警告
+            circle_center2 = (700, 40)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+            if 96 < right_shoulder_per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+            elif 96 < left_shoulder_per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+
+            # 繪製紅色圓圈和文字警告
+            circle_center1 = (700, 90)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+            if 80 < right_shoulder_per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 80 < left_shoulder_per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+
+        cv2.imshow("Image", img)  # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            # 關閉目前的運動偵測視窗
+            current_tracking_window.destroy()
+            current_tracking_window = None
+            break
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+def track_pull_up2(detector):
+    '''
+    槓鈴划船運動偵測函式
+    '''
+    global current_motion, current_tracking_window, cap, barbellone_count
+    dir = 0                 # 初始化方向標誌，用於追蹤肢體運動方向
+    pTime = 0               # 初始化上一幀的時間，用於計算幀率
+    start_time = None       # 初始時間，用於追蹤從0到100的時間
+    blue_light_on = False   # 藍色燈號狀態
+    barbellone_count=0
+    bb_slow_on = False
+
+    while True:
+        success, img = cap.read()                   # 讀取攝像頭捕獲的畫面
+        img = cv2.resize(img, (1280, 720))         # 調整畫面大小
+        img = detector.findPose(img, False)        # 使用姿勢檢測器找到人體姿勢關鍵點
+
+        lmList = detector.findPosition(img, False) # 獲取人體關鍵點的位置
+        if len(lmList) != 0:
+            detector.findAngle(img, 12, 14, 16)     # 計算右手肩、右肘、右手腕的角度
+            angle = detector.findAngle(img, 11, 13, 15)  # 計算左手肩、左肘、左手腕的角度
+            low = 90                                 # 設定角度的下限值
+            high = 180                               # 設定角度的上限值
+            per = np.interp(angle, (low, high), (100, 0))  # 將角度插值到百分比範圍內
+
+            if per == 0:
+                start_time = time.time()  # 開始計時器
+                blue_light_on = False     # 重置藍色燈號狀態
+                bb_slow_on = False
+            elif per == 100:
+                if start_time is not None:
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time < 1.5:
+                        bb_slow_on = True
+                    start_time = None
+                    if elapsed_time > 1.5:
+                        blue_light_on = True  # 超過5秒，開啟藍色燈號
+                    start_time = None
+
+            # 顯示藍色燈號
+            if blue_light_on:
+                circle_center = (175, 250)
+                circle_radius = 20
+                circle_color = (255, 0, 0)  # 藍色 BGR 格式
+                cv2.circle(img, circle_center, circle_radius, circle_color, -1)  # 繪製實心圓
+
+            if bb_slow_on:
+                cv2.putText(img, 'Can add weight', (525, 650), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 255), 3)
+
+            # 顯示藍色文字
+            cv2.putText(img, 'Load', (50, 250), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 3)
+
+            # 計數器功能
+            if per == 100:
+                if dir == 0:
+                    barbellone_count += 0.5                    # 每次划船完成，計數器增加0.5
+                    dir = 1
+            if per == 0:
+                if dir == 1:
+                    barbellone_count += 0.5                    # 每次下降完成，計數器增加0.5
+                    dir = 0
+
+            cv2.putText(img, f'Reps: {int(barbellone_count)}', (50, 50),         # 在畫面上顯示划船次數
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            print(barbellone_count)
+
+            cTime = time.time()
+            fps = 1 / (cTime - pTime)
+            pTime = cTime
+            cv2.putText(img, f'FPS: {int(fps)}', (50, 100),          # 在畫面上顯示幀率
+                        cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 0), 3)
+            cv2.putText(img, 'Correct', (50, 150), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 3)#綠色
+            cv2.putText(img, 'Error', (50, 200), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 3)#紅色
+            bar = np.interp(angle, (low, high), (100, 650))     # 將角度插值到顯示條的範圍內
+            cv2.rectangle(img, (1100, 100), (1175, 650), (0, 255, 0), 3)  # 繪製顯示條的外框
+            cv2.rectangle(img, (1100, int(bar)), (1175, 650),
+                          (0, 255, 0), cv2.FILLED)             # 根據插值的角度繪製填充的顯示條
+            cv2.putText(img, str(int(per)) + '%', (1100, 75), cv2.FONT_HERSHEY_PLAIN, 4, (0, 0, 255), 3)
+            
+            circle_center1 = (225, 200)
+            circle_radius1 = 20
+            circle_color1 = (0, 0, 255)  # 紅色 BGR 格式
+
+            circle_center2 = (225, 140)
+            circle_radius2 = 20
+            circle_color2 = (0, 255, 0)  # 綠色 BGR 格式
+
+            # 檢測到不正確動作時，繪製紅色圓圈
+            if 80 < per < 95:
+                cv2.circle(img, circle_center1, circle_radius1, circle_color1, -1)  # 繪製實心圓
+            elif 96 < per <= 100:
+                cv2.circle(img, circle_center2, circle_radius2, circle_color2, -1)  # 繪製實心圓
+            
+        cv2.imshow("Image", img)                              # 顯示處理後的畫面
+
+        key = cv2.waitKey(1)
+        if key == ord('c') or key == ord('C'):
+            if current_tracking_window:
+                current_tracking_window.destroy()
+                current_tracking_window = None
+            break
+    # 釋放攝像頭資源
+    if cap is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+###積分模式選擇###
+def choose_push_up():
+    '''
+    選擇俯臥撐運動
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'push'
+    cap = cv2.VideoCapture(0)
+    choose_tracking_window()
+
+def choose_squat():
+    '''
+    選擇深蹲運動
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'squat'
+    cap = cv2.VideoCapture(0)
+    choose_tracking_window()
+
+def choose_shoulder_press():
+    '''
+    選擇啞鈴彎舉
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'shoulder_press'
+    cap = cv2.VideoCapture(0)
+    choose_tracking_window()
+
+def choose_pull_up():
+    '''
+    選擇槓鈴划船運動
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'pull_up'
+    cap = cv2.VideoCapture(0)
+    choose_tracking_window()
+
+###一般模式選擇###
+def chooseone_push_up():
+    '''
+    選擇俯臥撐運動
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'push'
+    cap = cv2.VideoCapture(0)
+    chooseone_tracking_window()
+
+def chooseone_squat():
+    '''
+    選擇深蹲運動
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'squat'
+    cap = cv2.VideoCapture(0)
+    chooseone_tracking_window()
+
+def chooseone_shoulder_press():
+    '''
+    選擇啞鈴彎舉
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'shoulder_press'
+    cap = cv2.VideoCapture(0)
+    chooseone_tracking_window()
+
+def chooseone_pull_up():
+    '''
+    選擇槓鈴划船運動
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'pull_up'
+    cap = cv2.VideoCapture(0)
+    chooseone_tracking_window()
+
+###體能指導選擇###
+def choosetwo_push_up():
+    '''
+    選擇俯臥撐運動
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'push'
+    cap = cv2.VideoCapture(0)
+    choosetwo_tracking_window()
+
+def choosetwo_squat():
+    '''
+    選擇深蹲運動
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'squat'
+    cap = cv2.VideoCapture(0)
+    choosetwo_tracking_window()
+
+def choosetwo_shoulder_press():
+    '''
+    選擇啞鈴彎舉
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'shoulder_press'
+    cap = cv2.VideoCapture(0)
+    choosetwo_tracking_window()
+
+def choosetwo_pull_up():
+    '''
+    選擇槓鈴划船運動
+    '''
+    global current_motion, current_tracking_window, cap
+    current_motion = 'pull_up'
+    cap = cv2.VideoCapture(0)
+    choosetwo_tracking_window()
+
+###偵測視窗###
+def choose_tracking_window():
+    '''
+    選擇運動偵測視窗
+    '''
+    global current_motion, current_tracking_window
+
+    current_tracking_window = tk.Toplevel()
+    current_tracking_window.title("選擇運動偵測")
+    label = tk.Label(current_tracking_window, text=f"選擇{current_motion}偵測中...", font=("Arial", 12))
+    label.pack(pady=20)
+
+    detector = pm.poseDetector()
+
+    if current_motion == 'push':
+        track_push(detector)
+    elif current_motion == 'squat':
+        track_squat(detector)
+    elif current_motion == 'shoulder_press':  # 確保這裡有處理啞鈴彎舉運動
+        track_shoulder_press(detector)
+    elif current_motion == 'pull_up':  # 確保這裡有處理槓鈴划船運動
+        track_pull_up(detector)
+    else:
+        print("Invalid motion selected.")
+
+    if current_tracking_window is not None:
+        current_tracking_window.destroy()
+        cap.release()
+        cv2.destroyAllWindows()
+
+def chooseone_tracking_window():
+    '''
+    選擇運動偵測視窗
+    '''
+    global current_motion, current_tracking_window
+
+    current_tracking_window = tk.Toplevel()
+    current_tracking_window.title("選擇運動偵測")
+    label = tk.Label(current_tracking_window, text=f"選擇{current_motion}偵測中...", font=("Arial", 12))
+    label.pack(pady=20)
+
+    detector = pm.poseDetector()
+
+    if current_motion == 'push':
+        track_push1(detector)
+    elif current_motion == 'squat':
+        track_squat1(detector)
+    elif current_motion == 'shoulder_press':  # 確保這裡有處理啞鈴彎舉運動
+        track_shoulder_press1(detector)
+    elif current_motion == 'pull_up':  # 確保這裡有處理槓鈴划船運動
+        track_pull_up1(detector)
+    else:
+        print("Invalid motion selected.")
+
+    if current_tracking_window is not None:
+        current_tracking_window.destroy()
+        cap.release()
+        cv2.destroyAllWindows()
+
+def choosetwo_tracking_window():
+    '''
+    選擇運動偵測視窗
+    '''
+    global current_motion, current_tracking_window
+
+    current_tracking_window = tk.Toplevel()
+    current_tracking_window.title("選擇運動偵測")
+    label = tk.Label(current_tracking_window, text=f"選擇{current_motion}偵測中...", font=("Arial", 12))
+    label.pack(pady=20)
+
+    detector = pm.poseDetector()
+
+    if current_motion == 'push':
+        track_push2(detector)
+    elif current_motion == 'squat':
+        track_squat2(detector)
+    elif current_motion == 'shoulder_press':  # 確保這裡有處理啞鈴彎舉運動
+        track_shoulder_press2(detector)
+    elif current_motion == 'pull_up':  # 確保這裡有處理槓鈴划船運動
+        track_pull_up2(detector)
+    else:
+        print("Invalid motion selected.")
+
+    if current_tracking_window is not None:
+        current_tracking_window.destroy()
+        cap.release()
+        cv2.destroyAllWindows()
+
+###模式選擇###
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+from PIL import Image, ImageTk
+
+def choose_mode_window(detector):
+    '''
+    選擇模式的視窗
+    '''
+    def show_score_info_window():
+        show_score_info(detector)
+
+    def on_self_test():
+        '''
+        運動能力檢測
+        '''
+        input_gender_and_age()
+    
+    def on_fitness_plan():
+        '''
+        體能指導建議
+        '''
+        input_height_weight_fitness_plan()
+
+    def show_gif_window():
+        '''
+        顯示 GIF 圖片的視窗
+        '''
+        try:
+            # 初始化 Pygame 並播放 MP3 檔案
+            pygame.mixer.init()  # 初始化音效模組
+            mp3_path = r"D:\aisport\aisport\videos\haha\12746.mp3"  # 替換為你的 MP3 檔案路徑
+            pygame.mixer.music.load(mp3_path)
+            pygame.mixer.music.play()
+        except Exception as e:
+            print(f"MP3 播放錯誤: {e}")
+
+        gif_window = tk.Toplevel()
+        gif_window.title("動畫")
+        gif_window.geometry("1500x700+0+0")  # 擴大視窗大小
+
+        # 載入 GIF 圖片
+        gif_path = r"D:\aisport\aisport\videos\haha\giphy.gif"  # 替換為你的 GIF 圖片路徑
+        try:
+            gif = Image.open(gif_path)
+            gif_frames = gif.n_frames
+            print(f"成功載入 GIF，幀數: {gif_frames}")
+        except Exception as e:
+            print(f"GIF 載入錯誤: {e}")
+            return
+
+        # 設置縮放比例
+        scale = 3  # 放大比例
+
+        # 顯示 GIF 圖片的每一幀
+        gif_label = tk.Label(gif_window)
+        gif_label.pack()
+
+        def update_frame(frame):
+            '''
+            更新 GIF 圖片的幀
+            '''
+            try:
+                gif.seek(frame)
+                frame_image = gif.copy()
+                frame_image = frame_image.resize((frame_image.width * scale, frame_image.height * scale), Image.LANCZOS)
+                gif_frame = ImageTk.PhotoImage(frame_image)
+                gif_label.config(image=gif_frame)
+                gif_label.image = gif_frame
+
+                # 循環播放
+                frame = (frame + 1) % gif_frames
+                gif_window.after(100, update_frame, frame)
+            except Exception as e:
+                print(f"更新幀錯誤: {e}")
+
+        gif_window.after(0, update_frame, 0)
+
+        # 設置4秒後關閉視窗
+        gif_window.after(4200, gif_window.destroy)
+
+    # 創建主視窗
+    mode_window = tk.Tk()
+    mode_window.title("主視窗")
+    mode_window.geometry("400x350+400+0")
+    mode_window.configure(bg='#f0f0f0')
+
+    # 標籤設置
+    label = tk.Label(mode_window, text="請選擇模式", font=("Arial", 18, 'bold'), bg='#f0f0f0', fg='#333')
+    label.pack(pady=20)
+
+    # 顯示公告（假設 show_notice 是定義好的函數）
+    show_notice()  # 如果沒有此函數，您可以註釋掉此行
+
+    # 按鈕設置
+    button_font = ("Arial", 14, 'bold')
+    button_padding = {'padx': 20, 'pady': 10}
+
+    a_button = tk.Button(mode_window, text="運動能力檢測", command=on_self_test, font=button_font, bg='#FF5733', fg='#ffffff', activebackground='#E64A19', activeforeground='#ffffff')
+    a_button.pack(**button_padding)
+
+    b_button = tk.Button(mode_window, text="積分模式", command=lambda: select_mode('B', detector), font=button_font, bg='#2196F3', fg='#ffffff', activebackground='#1E88E5', activeforeground='#ffffff')
+    b_button.pack(**button_padding)
+
+    c_button = tk.Button(mode_window, text="體能指導建議", command=on_fitness_plan, font=button_font, bg='#4CAF50', fg='#ffffff', activebackground='#388E3C', activeforeground='#ffffff')
+    c_button.pack(**button_padding)
+
+    score_info_button = tk.Button(mode_window, text="積分資訊", command=show_score_info_window, font=button_font, bg='#2196F3', fg='#ffffff', activebackground='#1E88E5', activeforeground='#ffffff')
+    score_info_button.pack(**button_padding)
+
+    def on_closing():
+        mode_window.destroy()
+        root = tk.Tk()  # 創建新的根視窗以避免tk視窗
+        root.withdraw()  # 隱藏新的根視窗
+        show_gif_window()
+
+    mode_window.protocol("WM_DELETE_WINDOW", on_closing)
+    mode_window.mainloop()
+
+###自我檢測模式###
+def input_gender_and_age():
+    # 初始化 Pygame 並播放 MP3 檔案
+    pygame.mixer.init()  # 初始化音效模組
+    mp3_path = r"D:\aisport\aisport\videos\haha\14289.mp3"  # 替換為你的 MP3 檔案路徑
+    pygame.mixer.music.load(mp3_path)
+    pygame.mixer.music.play()
+
+    # 輸入性別和年齡的視窗
+    gender_window = tk.Toplevel()
+    gender_window.title("輸入性別")
+    gender_window.geometry("250x125+800+0")  # 設定視窗大小和位置（寬度x高度+左上角x座標+左上角y座標）
+    gender_window.configure(bg='#f0f0f0')
+
+    gender_label = tk.Label(gender_window, text="請輸入性別（男/女）:", font=("Arial", 12, 'bold'), bg='#f0f0f0', fg='#333')
+    gender_label.pack()
+
+    gender_entry = tk.Entry(gender_window)
+    gender_entry.pack()
+
+    def submit_gender():
+        gender = gender_entry.get()
+        if gender.lower() in ['男', '女']:
+            gender_window.destroy()  # 關閉性別視窗
+            input_age(gender)  # 將性別作為參數傳遞
+        else:
+            messagebox.showerror("錯誤", "請輸入有效的性別（男/女）！")
+
+    submit_button = tk.Button(gender_window, text="確定", command=submit_gender, font=("Arial", 10, 'bold'), bg='#64B5F6', fg='#ffffff', activebackground='#1E88E5', activeforeground='#ffffff')
+    submit_button.pack()
+
+    def cancel_gender():
+        gender_window.destroy()
+
+    cancel_button = tk.Button(gender_window, text="取消", command=cancel_gender, font=("Arial", 10, 'bold'), bg='#D32F2F', fg='#ffffff', activebackground='#B71C1C', activeforeground='#ffffff')
+    cancel_button.pack()
+
+def input_age(gender):
+    '''
+    輸入年齡的視窗
+    '''
+    age_window = tk.Toplevel()
+    age_window.title("輸入年齡")
+    age_window.geometry("250x125+800+0")
+    age_window.configure(bg='#f0f0f0')
+
+    age_label = tk.Label(age_window, text="請輸入年齡:", font=("Arial", 12, 'bold'), bg='#f0f0f0', fg='#333')
+    age_label.pack()
+
+    age_entry = tk.Entry(age_window)
+    age_entry.pack()
+
+    def submit_age():
+        age = age_entry.get()
+        try:
+            age = int(age)
+            if 12 <= age <= 60:
+                age_window.destroy()  # 關閉年齡視窗
+                show_squat_count_window(gender, age)  # 將性別和年齡作為參數傳遞
+            else:
+                messagebox.showerror("錯誤", "請輸入有效的年齡（12~60）！")
+        except ValueError:
+            messagebox.showerror("錯誤", "請輸入有效的年齡（12~60）！")
+
+    submit_button = tk.Button(age_window, text="確定", command=submit_age, font=("Arial", 10, 'bold'), bg='#64B5F6', fg='#ffffff', activebackground='#1E88E5', activeforeground='#ffffff')
+    submit_button.pack()
+
+    def cancel_age():
+        age_window.destroy()
+
+    cancel_button = tk.Button(age_window, text="取消", command=cancel_age, font=("Arial", 10, 'bold'), bg='#D32F2F', fg='#ffffff', activebackground='#B71C1C', activeforeground='#ffffff')
+    cancel_button.pack()
+
+def show_squat_count_window(gender, age):
+    '''
+    顯示深蹲次數視窗
+    '''
+    squat_counts = {
+        '男': {
+            (12, 18): (20, 10, 14, 10),  # (俯臥撐次數, 深蹲次數, 啞鈴彎舉次數, 啞鈴划船次數)
+            (19, 29): (35, 20, 26, 20),
+            (30, 44): (30, 15, 20, 15),
+            (45, 60): (20, 8, 14, 10)
+        },
+        '女': {
+            (12, 18): (6, 10, 10, 10),  # (俯臥撐次數, 深蹲次數, 啞鈴彎舉次數, 啞鈴划船次數)
+            (19, 29): (18, 16, 20, 14),
+            (30, 44): (12, 14, 14, 12),
+            (45, 60): (6, 6, 10, 8)
+        }
+    }
+
+    # 獲取相應的深蹲次數
+    for age_range, counts in squat_counts[gender].items():
+        if age_range[0] <= age <= age_range[1]:
+            count, squat_count, dumbbell_count, barbell_count = counts
+            break
+
+    squat_count_window = tk.Toplevel()
+    squat_count_window.title("運動能力檢測次數")
+    squat_count_window.geometry("350x325+800+0")
+    squat_count_window.configure(bg='#f0f0f0')  # 設置背景色為淡灰色
+
+    label0 = tk.Label(squat_count_window, text=f"根據你的性別 {gender}、年齡 {age}", font=("Arial", 12, 'bold'), fg='#333', bg='#f0f0f0')
+    label1 = tk.Label(squat_count_window, text=f"需要做 {count} 下俯臥撐才合格", font=("Arial", 12, 'bold'), fg='#333', bg='#f0f0f0')
+    label2 = tk.Label(squat_count_window, text=f"需要做 {squat_count} 下深蹲才合格", font=("Arial", 12, 'bold'), fg='#333', bg='#f0f0f0')
+    label3 = tk.Label(squat_count_window, text=f"需要做 {dumbbell_count} 下啞鈴彎舉(10KG)才合格", font=("Arial", 12, 'bold'), fg='#333', bg='#f0f0f0')
+    label4 = tk.Label(squat_count_window, text=f"需要做 {barbell_count} 下啞鈴划船(10KG)才合格", font=("Arial", 12, 'bold'), fg='#333', bg='#f0f0f0')
+    
+    label0.pack(pady=20)
+    label1.pack(pady=20)
+    label2.pack(pady=20)
+    label3.pack(pady=20)
+    label4.pack(pady=20)
+
+    chooseone_motion_window()
+
+###體能指導建議###
+def input_height_weight_fitness_plan():
+    
+    # 初始化 Pygame 並播放 MP3 檔案
+    pygame.mixer.init()  # 初始化音效模組
+    mp3_path = r"D:\aisport\aisport\videos\haha\14289.mp3"  # 替換為你的 MP3 檔案路徑
+    pygame.mixer.music.load(mp3_path)
+    pygame.mixer.music.play()
+
+    '''
+    輸入身高和體重的視窗（用於健身計畫）
+    '''
+    hw_window = tk.Toplevel()
+    hw_window.title("輸入身高和體重")
+    hw_window.geometry("275x200+800+0")
+    hw_window.configure(bg='#f0f0f0')
+
+    height_label = tk.Label(hw_window, text="請輸入身高(cm):", font=("Arial", 12, 'bold'), bg='#f0f0f0', fg='#333')
+    height_label.pack()
+
+    height_entry = tk.Entry(hw_window)
+    height_entry.pack()
+
+    weight_label = tk.Label(hw_window, text="請輸入體重(kg):", font=("Arial", 12, 'bold'), bg='#f0f0f0', fg='#333')
+    weight_label.pack()
+
+    weight_entry = tk.Entry(hw_window)
+    weight_entry.pack()
+
+    def submit_height_weight_fitness_plan():
+        height = height_entry.get()
+        weight = weight_entry.get()
+        try:
+            height = float(height)
+            weight = float(weight)
+            hw_window.destroy()  # 關閉身高和體重視窗
+            input_sets(height, weight)  # 調用輸入組數函數
+        except ValueError:
+            messagebox.showerror("錯誤", "請輸入有效的身高和體重！")
+
+    submit_button = tk.Button(hw_window, text="確定", command=submit_height_weight_fitness_plan, font=("Arial", 12, 'bold'), bg='#64B5F6', fg='#ffffff', activebackground='#1E88E5', activeforeground='#ffffff')
+    submit_button.pack()
+
+    cancel_button = tk.Button(hw_window, text="取消", command=hw_window.destroy, font=("Arial", 12, 'bold'), bg='#D32F2F', fg='#ffffff', activebackground='#B71C1C', activeforeground='#ffffff')
+    cancel_button.pack()
+
+def input_sets(height, weight):
+    '''
+    輸入運動組數的視窗
+    '''
+    sets_window = tk.Toplevel()
+    sets_window.title("輸入運動組數")
+    sets_window.geometry("250x125+800+0")
+    sets_window.configure(bg='#f0f0f0')
+
+    sets_label = tk.Label(sets_window, text="請輸入運動組數:", font=("Arial", 12, 'bold'), bg='#f0f0f0', fg='#333')
+    sets_label.pack()
+
+    sets_entry = tk.Entry(sets_window)
+    sets_entry.pack()
+
+    def submit_sets():
+        sets = sets_entry.get()
+        try:
+            sets = int(sets)
+            if sets > 0 and sets <= 5:  # 上限設為5，並且不能為0
+                sets_window.destroy()  # 關閉組數輸入視窗
+                show_fitness_plan_details(height, weight, sets)  # 傳遞身高、體重和組數到下一步函數
+            else:
+                messagebox.showerror("錯誤", "請輸入有效的組數（介於1到5之間）！")
+        except ValueError:
+            messagebox.showerror("錯誤", "請輸入有效的組數（介於1到5之間）！")
+
+    submit_button = tk.Button(sets_window, text="確定", command=submit_sets, font=("Arial", 12, 'bold'), bg='#64B5F6', fg='#ffffff', activebackground='#1E88E5', activeforeground='#ffffff')
+    submit_button.pack()
+
+    cancel_button = tk.Button(sets_window, text="取消", command=sets_window.destroy, font=("Arial", 12, 'bold'), bg='#D32F2F', fg='#ffffff', activebackground='#B71C1C', activeforeground='#ffffff')
+    cancel_button.pack()
+
+def show_fitness_plan_details(height, weight, sets):
+    '''
+    顯示健身計畫細節的視窗
+    '''
+    fitness_plan_details_window = tk.Toplevel()
+    fitness_plan_details_window.title("建議運動視窗")
+    fitness_plan_details_window.geometry("300x350+800+0")
+    fitness_plan_details_window.configure(bg='#f0f0f0')  # 設置背景色為淡灰色
+
+    label0 = tk.Label(fitness_plan_details_window, text=f"您的身高 {int(height)}cm 和體重 {int(weight)}kg", font=("Arial", 12, "bold"), fg='#333', bg='#f0f0f0')
+    bmi = calculate_bmi(height, weight)
+    label_bmi = tk.Label(fitness_plan_details_window, text=f"您的BMI值為: {bmi}", font=("Arial", 12, "bold"), fg='#333', bg='#f0f0f0')
+    label1 = tk.Label(fitness_plan_details_window, text=f"您選擇了 {sets} 組運動", font=("Arial", 12, "bold"), fg='#333', bg='#f0f0f0')
+
+    label0.pack(pady=10)
+    label_bmi.pack(pady=10)
+    label1.pack(pady=10)
+
+    # 在這裡使用組數和BMI進行相關計算
+    exercise_counts = {
+        (0, 18.4): {
+            (0, 1): (10, 10, 14, 14),  # (俯臥撐次數, 深蹲次數, 啞鈴彎舉次數, 啞鈴划船次數)
+            (2, 3): (8, 8, 12, 12),
+            (4, 5): (6, 6, 8, 10),
+        },
+        (18.5, 23.9): {
+            (0, 1): (18, 20, 18, 20),
+            (2, 3): (15, 18, 16, 18),
+            (4, 5): (12, 15, 12, 15),
+        },
+        (24, 26.9): {
+            (0, 1): (15, 18, 14, 18),
+            (2, 3): (12, 15, 12, 15),
+            (4, 5): (10, 12, 10, 12),
+        },
+        (27, 29.9): {
+            (0, 1): (12, 15, 12, 15),
+            (2, 3): (10, 12, 10, 12),
+            (4, 5): (8, 10, 8, 10),
+        },
+        (30, 34.9): {
+            (0, 1): (10, 12, 10, 12),
+            (2, 3): (8, 10, 8, 10),
+            (4, 5): (6, 8, 6, 8),
+        },
+        (35, 40.9): {
+            (0, 1): (8, 10, 8, 10),
+            (2, 3): (6, 8, 6, 8),
+            (4, 5): (4, 6, 4, 6),
+        }
+    }
+
+    for bmi_range, counts in exercise_counts.items():
+        if bmi_range[0] < bmi <= bmi_range[1]:
+            for sets_range, counts_sets in counts.items():
+                if sets_range[0] <= sets <= sets_range[1]:
+                    count, squat_count, dumbbell_count, barbell_count = counts_sets
+                    break
+
+    label2 = tk.Label(fitness_plan_details_window, text=f"每一組做 {count} 下俯臥撐", font=("Arial", 12, "bold"), fg='#333', bg='#f0f0f0')
+    label3 = tk.Label(fitness_plan_details_window, text=f"每一組做 {squat_count} 下深蹲", font=("Arial", 12, "bold"), fg='#333', bg='#f0f0f0')
+    label4 = tk.Label(fitness_plan_details_window, text=f"每一組做 {dumbbell_count} 下啞鈴彎舉(10KG)", font=("Arial", 12, "bold"), fg='#333', bg='#f0f0f0')
+    label5 = tk.Label(fitness_plan_details_window, text=f"每一組做 {barbell_count} 下啞鈴划船(10KG)", font=("Arial", 12, "bold"), fg='#333', bg='#f0f0f0')
+
+    label2.pack(pady=10)
+    label3.pack(pady=10)
+    label4.pack(pady=10)
+    label5.pack(pady=10)
+
+    choosetwo_motion_window()
+
+def calculate_bmi(height, weight):
+    '''
+    計算BMI值
+    '''
+    height_m = height / 100  # 將身高從cm轉換為m
+    bmi = weight / (height_m ** 2)
+    return round(bmi, 2)
+
+###積分模式選擇###
+def select_mode(mode, detector, mode_window):
+    '''
+    選擇模式後的處理函式
+    '''
+    global current_motion, current_tracking_window, cap
+
+    print("選擇的模式是:", mode)
+    
+    if mode == 'B':
+        mode_window.destroy()  # 關閉模式選擇視窗
+        show_score_info(detector)  # 顯示積分模式資訊的視窗
+    else:
+        mode_window.destroy()
+
+###運動項目選擇視窗###
+#pip install pygame要記得
+import tkinter as tk
+from PIL import Image, ImageTk
+import pygame
+
+def show_gif_window():
+        '''
+        顯示 GIF 圖片的視窗
+        '''
+        try:
+            # 初始化 Pygame 並播放 MP3 檔案
+            pygame.mixer.init()  # 初始化音效模組
+            mp3_path = r"D:\aisport\aisport\videos\haha\y1145.mp3"  # 替換為你的 MP3 檔案路徑
+            pygame.mixer.music.load(mp3_path)
+            pygame.mixer.music.play()
+        except Exception as e:
+            print(f"MP3 播放錯誤: {e}")
+
+        gif_window = tk.Toplevel()
+        gif_window.title("動畫")
+        gif_window.geometry("1500x700+0+0")  # 擴大視窗大小
+
+        # 載入 GIF 圖片
+        gif_path = r"D:\aisport\aisport\videos\haha\9150e4e5jw1fcc9jzyo1mg20dc0dctco.gif"  # 替換為你的 GIF 圖片路徑
+        try:
+            gif = Image.open(gif_path)
+            gif_frames = gif.n_frames
+            print(f"成功載入 GIF，幀數: {gif_frames}")
+        except Exception as e:
+            print(f"GIF 載入錯誤: {e}")
+            return
+
+        # 設置縮放比例
+        scale = 3  # 放大比例
+
+        # 顯示 GIF 圖片的每一幀
+        gif_label = tk.Label(gif_window)
+        gif_label.pack()
+
+        def update_frame(frame):
+            '''
+            更新 GIF 圖片的幀
+            '''
+            try:
+                gif.seek(frame)
+                frame_image = gif.copy()
+                frame_image = frame_image.resize((frame_image.width * scale, frame_image.height * scale), Image.LANCZOS)
+                gif_frame = ImageTk.PhotoImage(frame_image)
+                gif_label.config(image=gif_frame)
+                gif_label.image = gif_frame
+
+                # 循環播放
+                frame = (frame + 1) % gif_frames
+                gif_window.after(100, update_frame, frame)
+            except Exception as e:
+                print(f"更新幀錯誤: {e}")
+
+        gif_window.after(0, update_frame, 0)
+
+        # 設置4秒後關閉視窗
+        gif_window.after(4200, gif_window.destroy)
+
+def choose_motion_window():
+    '''
+    選擇運動的主視窗
+    '''
+
+    # 初始化 Pygame 並播放 MP3 檔案
+    pygame.mixer.init()  # 初始化音效模組
+    mp3_path = r"D:\aisport\aisport\videos\haha\14289.mp3"  # 替換為你的 MP3 檔案路徑
+    pygame.mixer.music.load(mp3_path)
+    pygame.mixer.music.play()
+    
+    root = tk.Tk()
+    root.title("運動項目選擇")
+    root.geometry("290x275+0+330") 
+
+    def close_window():
+        '''
+        關閉視窗
+        '''
+        root.destroy()
+        show_gif_window()
+
+    label = tk.Label(root, text="請選擇要進行的運動", font=("Arial", 14, 'bold'))
+    label.pack(pady=20)
+
+    # 自定義按鈕顏色
+    button_bg_colors = ["#FFD700", "#7CFC00", "#FF69B4", "#FFA07A"]  # 每個按鈕一個顏色
+    button_fg_color = "#FFFFFF"  # 白色
+    button_active_bg_colors = ["#DAA520", "#32CD32", "#FF1493", "#FA8072"]  # 每個按鈕按下時的顏色
+
+    push_up_button = tk.Button(root, text="俯臥撐", command=choose_push_up, font=("Arial", 12, 'bold'), bg=button_bg_colors[0], fg=button_fg_color, activebackground=button_active_bg_colors[0])
+    push_up_button.pack(pady=10)
+
+    squat_button = tk.Button(root, text="深蹲", command=choose_squat, font=("Arial", 12, 'bold'), bg=button_bg_colors[1], fg=button_fg_color, activebackground=button_active_bg_colors[1])
+    squat_button.pack(pady=10)
+
+    shoulder_press_button = tk.Button(root, text="啞鈴彎舉", command=choose_shoulder_press, font=("Arial", 12, 'bold'), bg=button_bg_colors[2], fg=button_fg_color, activebackground=button_active_bg_colors[2])
+    shoulder_press_button.pack(pady=10)
+    
+    pull_up_button = tk.Button(root, text="啞鈴划船", command=choose_pull_up, font=("Arial", 12, 'bold'), bg=button_bg_colors[3], fg=button_fg_color, activebackground=button_active_bg_colors[3])  
+    pull_up_button.pack(pady=10)
+
+    root.protocol("WM_DELETE_WINDOW", close_window)  # 視窗關閉事件
+
+    root.mainloop()
+
+###運動能力檢測###
+def showone_gif_window():
+        '''
+        顯示 GIF 圖片的視窗
+        '''
+        try:
+            # 初始化 Pygame 並播放 MP3 檔案
+            pygame.mixer.init()  # 初始化音效模組
+            mp3_path = r"D:\aisport\aisport\videos\haha\y1145.mp3"  # 替換為你的 MP3 檔案路徑
+            pygame.mixer.music.load(mp3_path)
+            pygame.mixer.music.play()
+        except Exception as e:
+            print(f"MP3 播放錯誤: {e}")
+
+        gif_window = tk.Toplevel()
+        gif_window.title("動畫")
+        gif_window.geometry("1500x700+0+0")  # 擴大視窗大小
+
+        # 載入 GIF 圖片
+        gif_path = r"D:\aisport\aisport\videos\haha\452e3bd6a0b55014b58a34d6e99b193c.gif"  # 替換為你的 GIF 圖片路徑
+        try:
+            gif = Image.open(gif_path)
+            gif_frames = gif.n_frames
+            print(f"成功載入 GIF，幀數: {gif_frames}")
+        except Exception as e:
+            print(f"GIF 載入錯誤: {e}")
+            return
+
+        # 設置縮放比例
+        scale = 3  # 放大比例
+
+        # 顯示 GIF 圖片的每一幀
+        gif_label = tk.Label(gif_window)
+        gif_label.pack()
+
+        def update_frame(frame):
+            '''
+            更新 GIF 圖片的幀
+            '''
+            try:
+                gif.seek(frame)
+                frame_image = gif.copy()
+                frame_image = frame_image.resize((frame_image.width * scale, frame_image.height * scale), Image.LANCZOS)
+                gif_frame = ImageTk.PhotoImage(frame_image)
+                gif_label.config(image=gif_frame)
+                gif_label.image = gif_frame
+
+                # 循環播放
+                frame = (frame + 1) % gif_frames
+                gif_window.after(100, update_frame, frame)
+            except Exception as e:
+                print(f"更新幀錯誤: {e}")
+
+        gif_window.after(0, update_frame, 0)
+
+        # 設置4秒後關閉視窗
+        gif_window.after(4200, gif_window.destroy)
+
+def chooseone_motion_window():
+    '''
+    選擇運動的主視窗
+    '''
+    root = tk.Tk()
+    root.title("運動項目選擇")
+    root.geometry("290x275+0+330")  
+
+    def close_window():
+        '''
+        關閉視窗
+        '''
+        root.destroy()
+        showone_gif_window()
+
+    label = tk.Label(root, text="請選擇要進行的運動", font=("Arial", 14, 'bold'))
+    label.pack(pady=20)
+
+    # 自定義按鈕顏色
+    button_bg_colors = ["#FFD700", "#7CFC00", "#FF69B4", "#FFA07A"]  # 每個按鈕一個顏色
+    button_fg_color = "#FFFFFF"  # 白色
+    button_active_bg_colors = ["#DAA520", "#32CD32", "#FF1493", "#FA8072"]  # 每個按鈕按下時的顏色
+
+    push_up_button = tk.Button(root, text="俯臥撐", command=chooseone_push_up, font=("Arial", 12, 'bold'), bg=button_bg_colors[0], fg=button_fg_color, activebackground=button_active_bg_colors[0])
+    push_up_button.pack(pady=10)
+
+    squat_button = tk.Button(root, text="深蹲", command=chooseone_squat, font=("Arial", 12, 'bold'), bg=button_bg_colors[1], fg=button_fg_color, activebackground=button_active_bg_colors[1])
+    squat_button.pack(pady=10)
+
+    shoulder_press_button = tk.Button(root, text="啞鈴彎舉", command=chooseone_shoulder_press, font=("Arial", 12, 'bold'), bg=button_bg_colors[2], fg=button_fg_color, activebackground=button_active_bg_colors[2])
+    shoulder_press_button.pack(pady=10)
+    
+    pull_up_button = tk.Button(root, text="啞鈴划船", command=chooseone_pull_up, font=("Arial", 12, 'bold'), bg=button_bg_colors[3], fg=button_fg_color, activebackground=button_active_bg_colors[3])  
+    pull_up_button.pack(pady=10)
+
+    root.protocol("WM_DELETE_WINDOW", close_window)  # 視窗關閉事件
+
+    root.mainloop()
+
+###體能指導建議###
+def showtwo_gif_window():
+        '''
+        顯示 GIF 圖片的視窗
+        '''
+        try:
+            # 初始化 Pygame 並播放 MP3 檔案
+            pygame.mixer.init()  # 初始化音效模組
+            mp3_path = r"D:\aisport\aisport\videos\haha\y1145.mp3"  # 替換為你的 MP3 檔案路徑
+            pygame.mixer.music.load(mp3_path)
+            pygame.mixer.music.play()
+        except Exception as e:
+            print(f"MP3 播放錯誤: {e}")
+
+        gif_window = tk.Toplevel()
+        gif_window.title("動畫")
+        gif_window.geometry("600x600+0+0")  # 擴大視窗大小
+
+        # 載入 GIF 圖片
+        gif_path = r"D:\aisport\aisport\videos\haha\beb2e36f290f060e4879cd08ca6f5d94.gif"  # 替換為你的 GIF 圖片路徑
+        try:
+            gif = Image.open(gif_path)
+            gif_frames = gif.n_frames
+            print(f"成功載入 GIF，幀數: {gif_frames}")
+        except Exception as e:
+            print(f"GIF 載入錯誤: {e}")
+            return
+
+        # 設置縮放比例
+        scale = 2  # 放大比例
+
+        # 顯示 GIF 圖片的每一幀
+        gif_label = tk.Label(gif_window)
+        gif_label.pack()
+
+        def update_frame(frame):
+            '''
+            更新 GIF 圖片的幀
+            '''
+            try:
+                gif.seek(frame)
+                frame_image = gif.copy()
+                frame_image = frame_image.resize((frame_image.width * scale, frame_image.height * scale), Image.LANCZOS)
+                gif_frame = ImageTk.PhotoImage(frame_image)
+                gif_label.config(image=gif_frame)
+                gif_label.image = gif_frame
+
+                # 循環播放
+                frame = (frame + 1) % gif_frames
+                gif_window.after(100, update_frame, frame)
+            except Exception as e:
+                print(f"更新幀錯誤: {e}")
+
+        gif_window.after(0, update_frame, 0)
+
+        # 設置4秒後關閉視窗
+        gif_window.after(4000, gif_window.destroy)
+
+def choosetwo_motion_window():
+    '''
+    選擇運動的主視窗
+    '''
+    root = tk.Tk()
+    root.title("運動項目選擇")
+    root.geometry("290x275+0+330")  
+
+    def close_window():
+        '''
+        關閉視窗
+        '''
+        root.destroy()
+        showtwo_gif_window()
+
+    label = tk.Label(root, text="請選擇要進行的運動", font=("Arial", 14, 'bold'))
+    label.pack(pady=20)
+
+    # 自定義按鈕顏色
+    button_bg_colors = ["#FFD700", "#7CFC00", "#FF69B4", "#FFA07A"]  # 每個按鈕一個顏色
+    button_fg_color = "#FFFFFF"  # 白色
+    button_active_bg_colors = ["#DAA520", "#32CD32", "#FF1493", "#FA8072"]  # 每個按鈕按下時的顏色
+
+    push_up_button = tk.Button(root, text="俯臥撐", command=choosetwo_push_up, font=("Arial", 12, 'bold'), bg=button_bg_colors[0], fg=button_fg_color, activebackground=button_active_bg_colors[0])
+    push_up_button.pack(pady=10)
+
+    squat_button = tk.Button(root, text="深蹲", command=choosetwo_squat, font=("Arial", 12, 'bold'), bg=button_bg_colors[1], fg=button_fg_color, activebackground=button_active_bg_colors[1])
+    squat_button.pack(pady=10)
+
+    shoulder_press_button = tk.Button(root, text="啞鈴彎舉", command=choosetwo_shoulder_press, font=("Arial", 12, 'bold'), bg=button_bg_colors[2], fg=button_fg_color, activebackground=button_active_bg_colors[2])
+    shoulder_press_button.pack(pady=10)
+    
+    pull_up_button = tk.Button(root, text="啞鈴划船", command=choosetwo_pull_up, font=("Arial", 12, 'bold'), bg=button_bg_colors[3], fg=button_fg_color, activebackground=button_active_bg_colors[3])  
+    pull_up_button.pack(pady=10)
+
+    root.protocol("WM_DELETE_WINDOW", close_window)  # 視窗關閉事件
+
+    root.mainloop()
+
+###注意事項視窗以及積分資訊顯示###
+def select_mode(mode, detector):
+    '''
+    選擇模式後的處理函式
+    '''
+    if mode == 'B':
+        choose_motion_window()
+    elif mode == 'C':  # 新增判斷是否為積分模式
+        show_score_info(detector)  # 顯示積分模式資訊的視窗
+
+def show_notice():
+    '''
+    顯示注意事項的視窗
+    '''
+    notice_window = tk.Toplevel()
+    notice_window.title("注意事項")
+    notice_window.geometry("400x300+0+0")
+    notice_window.configure(bg='#f0f0f0')
+
+    notice_text = (
+        "1. 請注意運動姿勢，避免受傷。\n"
+        "2. 深蹲為無負重進行運動。\n"
+        "3. 啞鈴彎舉為左右手各負重5KG啞鈴。\n"
+        "4. 啞鈴划船為左右手各負重5KG啞鈴。")
+    
+    notice_label = tk.Label(notice_window, text=notice_text, font=("Arial", 14), justify="left", bg='#fff8e1', fg='#333')
+    notice_label.pack(pady=20, padx=20)
+
+def get_pushup_level(count):
+    '''
+    根據俯臥撐次數返回等級
+    '''
+    if count > 70:
+        return "菁英"
+    elif 65 < count <= 70:
+        return "宗師"
+    elif 60 < count <= 65:
+        return "大師"
+    elif 55 < count <= 60:
+        return "鑽石"
+    elif 50 < count <= 55:
+        return "白金"
+    elif 35 < count <= 50:
+        return "金牌"
+    elif 15 < count <= 35:
+        return "銀牌"
+    elif 1 <= count <= 15:
+        return "銅牌"
+    else:
+        return "尚未施測"
+
+def get_squat_level(count):
+    '''
+    根據深蹲次數返回等級
+    '''
+    if count > 65:
+        return "菁英"
+    elif 60 < count <= 65:
+        return "宗師"
+    elif 55 < count <= 60:
+        return "大師"
+    elif 50 < count <= 55:
+        return "鑽石"
+    elif 45 < count <= 50:
+        return "白金"
+    elif 30 < count <= 45:
+        return "金牌"
+    elif 15 < count <= 30:
+        return "銀牌"
+    elif 1 <= count <= 15:
+        return "銅牌"
+    else:
+        return "尚未施測"
+
+def get_barbell_level(count):
+    '''
+    根據啞鈴划船次數返回等級
+    '''
+    if count > 50:
+        return "菁英"
+    elif 45 < count <= 50:
+        return "宗師"
+    elif 40 < count <= 45:
+        return "大師"
+    elif 35 < count <= 40:
+        return "鑽石"
+    elif 30 < count <= 35:
+        return "白金"
+    elif 20 < count <= 30:
+        return "金牌"
+    elif 10 < count <= 20:
+        return "銀牌"
+    elif 1 <= count <= 10:
+        return "銅牌"
+    else:
+        return "尚未施測"
+
+def get_dumbbell_curl_level(count):
+    '''
+    根據啞鈴彎舉次數返回等級
+    '''
+    if count > 80:
+        return "菁英"
+    elif 70 < count <= 80:
+        return "宗師"
+    elif 60 < count <= 70:
+        return "大師"
+    elif 50 < count <= 60:
+        return "鑽石"
+    elif 40 < count <= 50:
+        return "白金"
+    elif 30 <count <=40:
+        return "金牌"
+    elif 15 <count <=30:
+        return "銀牌"
+    elif 1 <= count <=15:
+        return "銅牌"
+    else:
+        return "尚未施測"
+    
+import tkinter as tk
+from PIL import Image, ImageTk
+import pygame
+
+def show_score_info(detector):
+    '''
+    顯示積分模式資訊的視窗
+    '''
+    # 初始化 Pygame 並播放 MP3 檔案
+    pygame.mixer.init()  # 初始化音效模組
+    mp3_path = r"D:\aisport\aisport\videos\haha\10762.mp3"  # 替換為你的 MP3 檔案路徑
+    pygame.mixer.music.load(mp3_path)
+    pygame.mixer.music.play()
+
+    # 定義積分模式視窗
+    score_window = tk.Toplevel()
+    score_window.title("積分模式資訊")
+    score_window.geometry("600x250+800+0")
+
+    # 定義表格
+    table = tk.Frame(score_window)
+    table.grid(row=0, column=0, padx=10, pady=10)
+
+    # 表頭
+    headers = ["運動", "次數", "積分", "等級"]
+    for i, header in enumerate(headers):
+        header_label = tk.Label(table, text=header, font=("Arial", 14, "bold"), fg="blue", bg="#F0F0F0", width=10, anchor="center", justify="center")  # 設置字體為粗體並設置顏色為藍色，背景顏色為淡灰色
+        header_label.grid(row=0, column=i, padx=10, pady=10)
+
+    a = int(right_count) + int(left_count)
+    # 運動、次數、積分資訊
+    exercise_data = {
+        "俯臥撐": {"次數": int(pushup_count), "積分": int(pushup_count * 1.42857), "等級": get_pushup_level(pushup_count), "bg_color": "#FFD700"},
+        "深蹲": {"次數": int(squat_count), "積分": int(squat_count * 1.53846), "等級": get_squat_level(squat_count), "bg_color": "#7CFC00"},
+        "啞鈴彎舉": {"次數": int(a), "積分": int(a * 1.25), "等級": get_dumbbell_curl_level(a), "bg_color": "#FF69B4"},
+        "啞鈴划船": {"次數": int(barbell_count), "積分": int(barbell_count * 2), "等級": get_barbell_level(barbell_count), "bg_color": "#FFA07A"}
+    }
+
+    row = 1
+    for exercise, data in exercise_data.items():
+        exercise_label = tk.Label(table, text=exercise, font=("Arial", 12, "bold"), fg="white", bg=data["bg_color"], width=10, anchor="center", justify="center")  # 設置字體顏色為白色，背景顏色為運動對應的顏色
+        exercise_label.grid(row=row, column=0, padx=10, pady=5)
+
+        count_label = tk.Label(table, text=data["次數"], font=("Arial", 12), fg="black", bg="#F0F0F0", width=10, anchor="center", justify="center")  # 設置字體顏色為黑色，背景顏色為淡灰色
+        count_label.grid(row=row, column=1, padx=10, pady=5)
+
+        score_label = tk.Label(table, text=data["積分"], font=("Arial", 12), fg="black", bg="#F0F0F0", width=10, anchor="center", justify="center")  # 設置字體顏色為黑色，背景顏色為淡灰色
+        score_label.grid(row=row, column=2, padx=10, pady=5)
+
+        level_label = tk.Label(table, text=data["等級"], font=("Arial", 12), fg="black", bg="#F0F0F0", width=10, anchor="center", justify="center")  # 設置字體顏色為黑色，背景顏色為淡灰色
+        level_label.grid(row=row, column=3, padx=10, pady=5)
+
+        row += 1
+
+    # 更新次數的標籤
+    global pushup_count_label, squat_count_label, barbell_count_label
+    pushup_count_label = tk.Label(table, text=exercise_data["俯臥撐"]["次數"], font=("Arial", 12), fg="black", bg="#F0F0F0", width=10, anchor="center", justify="center")  # 設置字體顏色為黑色，背景顏色為淡灰色
+    pushup_count_label.grid(row=1, column=1, padx=10, pady=5)
+
+    squat_count_label = tk.Label(table, text=exercise_data["深蹲"]["次數"], font=("Arial", 12), fg="black", bg="#F0F0F0", width=10, anchor="center", justify="center")  # 設置字體顏色為黑色，背景顏色為淡灰色
+    squat_count_label.grid(row=2, column=1, padx=10, pady=5)
+
+    barbell_count_label = tk.Label(table, text=exercise_data["啞鈴划船"]["次數"], font=("Arial", 12), fg="black", bg="#F0F0F0", width=10, anchor="center", justify="center")  # 設置字體顏色為黑色，背景顏色為淡灰色
+    barbell_count_label.grid(row=4, column=1, padx=10, pady=5)
+
+###主程式###
+def main():  # 將 detector 作為參數
+    global current_motion, current_tracking_window, cap
+    if current_tracking_window is not None:
+        cap.release()
+        cv2.destroyAllWindows()
+        cap = None
+
+    if current_motion == 'push' and cap is not None:
+        track_push(detector)
+    elif current_motion == 'squat' and cap is not None:
+        track_squat(detector)
+    elif current_motion == 'pull_up' and cap is not None:  # 新增判斷划船
+        track_pull_up(detector)
+    else:
+        print("Invalid motion selected.")
+    detector = None  # 初始化 detector
+
+if __name__ == "__main__":
+    detector = None  # 初始化 detector
+    main()
+    choose_mode_window(detector)  # 將 detector 傳遞給 choose_mode_window
