@@ -1,0 +1,165 @@
+# 引入必要的函式庫
+import cv2
+import mediapipe as mp
+import math
+import time
+
+class poseDetector():
+    def __init__(self, mode=False, smooth=True, detectionCon=0.5, trackCon=0.5):
+        '''
+        初始化姿勢偵測器，設定相關參數。
+
+        參數：
+        - mode：靜態影像模式（預設：False）
+        - smooth：平滑的關鍵點（預設：True）
+        - detectionCon：最小檢測置信度（預設：0.5）
+        - trackCon：最小追蹤置信度（預設：0.5）
+        '''
+        self.mode = mode
+        self.smooth = smooth
+        self.detectionCon = detectionCon
+        self.trackCon = trackCon
+
+        # 初始化 Mediapipe Pose 模組
+        self.mpDraw = mp.solutions.drawing_utils
+        self.mpPose = mp.solutions.pose
+        self.pose = self.mpPose.Pose(
+            static_image_mode=bool(self.mode),
+            smooth_landmarks=bool(self.smooth),
+            min_detection_confidence=float(self.detectionCon),
+            min_tracking_confidence=float(self.trackCon)
+        )
+
+    def findPose(self, img, draw=True):
+        '''
+        偵測並在影像上繪製關鍵點。
+
+        參數：
+        - img：輸入影像
+        - draw：是否在影像上繪製關鍵點（預設：True）
+
+        返回：
+        - img：具有或不具有關鍵點的影像
+        '''
+        try:
+            # 將影像轉換為 RGB 格式
+            imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            # 處理影像以獲得姿勢關鍵點
+            self.results = self.pose.process(imgRGB)
+
+            # 若偵測到姿勢關鍵點，則連接關鍵點
+            if self.results.pose_landmarks:
+                if draw:
+                    self.mpDraw.draw_landmarks(
+                        img, self.results.pose_landmarks, self.mpPose.POSE_CONNECTIONS)
+
+            return img
+        except:
+            return 0
+
+    def findPosition(self, img, draw=True):
+        '''
+        找到並在影像上繪製關節位置。
+
+        參數：
+        - img：輸入影像
+        - draw：是否在影像上繪製關節位置（預設：True）
+
+        返回：
+        - lmList：包含關節ID和（x，y）坐標的列表
+        '''
+        self.lmList = []
+        # 檢查是否有姿勢關鍵點
+        if self.results.pose_landmarks:
+            for id, lm in enumerate(self.results.pose_landmarks.landmark):
+                # 獲取影像尺寸
+                h, w, c = img.shape
+                # 獲取關鍵點的（x，y）坐標
+                cx = int(lm.x * w)
+                cy = int(lm.y * h)
+                self.lmList.append([id, cx, cy])
+                if draw:
+                    # 在關節位置繪製圓圈
+                    cv2.circle(img, (cx, cy), 5, (255, 0, 0), cv2.FILLED)
+
+        return self.lmList
+
+    def findAngle(self, img, p1, p2, p3, draw=True):
+        '''
+        計算並繪製三個指定關節之間的角度。
+
+        參數：
+        - img：輸入影像
+        - p1、p2、p3：計算角度的關節ID
+        - draw：是否在影像上繪製角度信息（預設：True）
+
+        返回：
+        - angle：計算得到的角度
+        '''
+        # 獲取指定關節的（x，y）坐標
+        x1, y1 = self.lmList[p1][1:]
+        x2, y2 = self.lmList[p2][1:]
+        x3, y3 = self.lmList[p3][1:]
+
+        # 使用反正切計算角度
+        angle = math.degrees(math.atan2(y3 - y2, x3 - x2) - math.atan2(y1 - y2, x1 - x2))
+
+        # 確保角度為正值
+        if angle < 0:
+            angle *= -1
+        else:
+            angle = (360 - angle)
+
+        if draw:
+            # 繪製線條和圓圈以突顯關節和角度
+            cv2.line(img, (x1, y1), (x2, y2), (255, 255, 25), 3)
+            cv2.line(img, (x3, y3), (x2, y2), (255, 255, 25), 3)
+            cv2.circle(img, (x1, y1), 5, (0, 0, 255), cv2.FILLED)
+            cv2.circle(img, (x1, y1), 10, (0, 0, 255), 2)
+            cv2.circle(img, (x2, y2), 5, (0, 0, 255), cv2.FILLED)
+            cv2.circle(img, (x2, y2), 10, (0, 0, 255), 2)
+            cv2.circle(img, (x3, y3), 5, (0, 0, 255), cv2.FILLED)
+            cv2.circle(img, (x3, y3), 10, (0, 0, 255), 2)
+
+            # 在影像上顯示角度信息
+            point = (x2 + 10, y2 + 50)
+            cv2.putText(img, str(int(angle)), point, cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 2, cv2.LINE_AA, False)
+
+        return angle
+
+def main():
+    # 輸入影片檔案
+    cap = cv2.VideoCapture('PoseVideos/1.mp4')
+    # # 使用攝影機
+    # cap = cv2.VideoCapture(0)
+
+    pTime = 0
+    detector = poseDetector()
+    while True:
+        success, img = cap.read()
+        img = detector.findPose(img)
+
+        # 如果偵測到關鍵點，則獲取並顯示位置信息
+        lmList = detector.findPosition(img)
+        if len(lmList) != 0:
+            print(lmList)
+
+        cTime = time.time()
+        fps = 1 / (cTime - pTime)
+        pTime = cTime
+
+        # 在影像上顯示 FPS
+        cv2.putText(img, str(int(fps)), (70, 50), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 0), 3)
+        cv2.imshow("Image", img)
+
+        # 等待 1 毫秒，檢查是否按下關閉按鈕
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27:  # 27 為 Esc 鍵的 ASCII 碼
+            break
+
+    # 釋放視頻捕捉對象並關閉所有 OpenCV 視窗
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
